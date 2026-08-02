@@ -1,0 +1,12 @@
+[project]
+name = "langsmith-chatbot-eval"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "ipykernel>=7.3.0",
+    "langsmith>=0.10.15",
+    "openai>=2.52.0",
+    "python-dotenv>=1.2.2",
+]
