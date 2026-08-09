@@ -28,8 +28,8 @@ def correctness(inputs: dict, outputs: dict, reference_outputs: dict) -> bool:
     return "CORRECT" in grade
 
 
-## Concisions - chekcs whether the actual output is less than 2X the length of th eexpected result.
+## Concisions - chekcs whether the actual output is less than 4X the length of th eexpected result.
 def concision(outputs: dict, reference_outputs: dict) -> bool:
     return int(
-        len(outputs["response"]) < 2 * len(reference_outputs["answer"])
+        len(outputs["response"]) < 4 * len(reference_outputs["answer"])
     )

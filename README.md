@@ -7,9 +7,9 @@ A small evaluation harness that scores a simple OpenAI-powered chatbot using [La
 This project exists to exercise the LangSmith evaluation workflow end-to-end:
 
 1. A small **dataset** of question/answer pairs is created once in LangSmith (and reused on later runs).
-2. A **target function** answers each question using OpenAI's `gpt-4o-mini`or `gpt-4-turbo`.
+2. A **target function** answers each question using OpenAI, run once per model in `MODELS` (`gpt-4o-mini` and `gpt-4-turbo`).
 3. Two **evaluators** score every answer — one using an LLM judge, one using a simple length rule.
-4. Results are published to LangSmith as an **experiment**, with a link to view them in the UI.
+4. Results are published to LangSmith as a separate **experiment** per model, each with a link to view it in the UI.
 
 ## Architecture
 
@@ -18,16 +18,16 @@ graph TD
     ENV[".env"] --> CONFIG["config.py<br/>load_config()"]
     CONFIG --> CLIENTS["clients.py<br/>client (LangSmith)<br/>openai_client (traced)"]
 
-    CLIENTS --> APP["app.py<br/>my_app() / ls_target()"]
+    CLIENTS --> APP["app.py<br/>my_app(question, model)"]
     CLIENTS --> DATASET["dataset.py<br/>DATASET_NAME<br/>create_dataset()"]
     CLIENTS --> EVALUATORS["evaluators.py<br/>correctness() / concision()"]
 
-    APP --> RUN["run.py<br/>main()"]
+    APP --> RUN["run.py<br/>MODELS = [gpt-4o-mini, gpt-4-turbo]<br/>main()"]
     DATASET --> RUN
     EVALUATORS --> RUN
 
-    RUN --> LS[("LangSmith backend")]
-    APP --> OPENAI[("OpenAI API<br/>gpt-4o-mini")]
+    RUN --> LS[("LangSmith backend<br/>(1 experiment per model)")]
+    APP --> OPENAI[("OpenAI API<br/>gpt-4o-mini / gpt-4-turbo")]
     EVALUATORS --> OPENAI
 
     MAIN["__main__.py"] --> RUN
@@ -43,23 +43,27 @@ flowchart TD
     D --> D1{"Dataset already<br/>exists in LangSmith?"}
     D1 -- yes --> E
     D1 -- no --> D2["Create dataset +<br/>add 5 Q&A examples"]
-    D2 --> E["client.evaluate(ls_target, ...)"]
+    D2 --> E["For each model in MODELS<br/>(gpt-4o-mini, gpt-4-turbo)"]
 
-    E --> F["For each dataset example"]
-    F --> G["ls_target(inputs)"]
-    G --> H["my_app(question)"]
-    H --> I["OpenAI gpt-4o-mini<br/>chat completion"]
-    I --> J["response returned as<br/>{'response': ...}"]
+    E --> E1["Build ls_target(inputs)<br/>bound to this model"]
+    E1 --> F["client.evaluate(ls_target, ...,<br/>experiment_prefix=f'{model}-chatbot')"]
 
-    J --> K["correctness(inputs, outputs,<br/>reference_outputs)"]
-    K --> K1["LLM judge call to<br/>gpt-4o-mini: CORRECT/INCORRECT"]
+    F --> G["For each dataset example"]
+    G --> H["ls_target(inputs)"]
+    H --> I["my_app(question, model=model)"]
+    I --> J["OpenAI chat completion<br/>(gpt-4o-mini or gpt-4-turbo)"]
+    J --> K["response returned as<br/>{'response': ...}"]
 
-    J --> L["concision(outputs,<br/>reference_outputs)"]
-    L --> L1["len(response) < 2 * len(reference)"]
+    K --> L["correctness(inputs, outputs,<br/>reference_outputs)"]
+    L --> L1["LLM judge call to<br/>gpt-4o-mini: CORRECT/INCORRECT"]
 
-    K1 --> M["Results aggregated into<br/>a LangSmith experiment"]
-    L1 --> M
-    M --> N["Experiment URL printed<br/>(smith.langchain.com)"]
+    K --> M["concision(outputs,<br/>reference_outputs)"]
+    M --> M1["len(response) < 4 * len(reference)"]
+
+    L1 --> N["Results aggregated into<br/>this model's LangSmith experiment"]
+    M1 --> N
+    N --> O["Experiment URL printed<br/>(smith.langchain.com)"]
+    N -.-> E
 ```
 
 ## Project structure
@@ -78,10 +82,10 @@ langsmith-chatbot-eval/
     ├── __main__.py          # Entry point: `python -m src` → calls run.main()
     ├── config.py            # load_config(): loads .env, sets LANGSMITH_API_KEY / OPENAI_API_KEY / LANGSMITH_TRACING
     ├── clients.py            # LangSmith `client` and LangSmith-wrapped `openai_client`
-    ├── app.py                # my_app(): calls gpt-4o-mini; ls_target(): LangSmith-compatible target wrapper
+    ├── app.py                # my_app(question, model): OpenAI chat completion for a given model; ls_target(): example LangSmith-compatible target wrapper
     ├── dataset.py             # DATASET_NAME + create_dataset(): idempotent dataset creation with 5 Q&A examples
     ├── evaluators.py          # correctness() (LLM-as-judge) and concision() (length heuristic)
-    └── run.py                 # main(): creates dataset, then runs client.evaluate(...)
+    └── run.py                 # MODELS list + main(): creates dataset, then runs client.evaluate(...) once per model
 ```
 
 ## Requirements
@@ -118,24 +122,24 @@ or, using `uv`:
 uv run python -m src
 ```
 
-**Important:** this must be run with the `-m` flag (as a module), not by pointing Python at the file directly. The `src` package uses relative imports (`from .app import ls_target`, etc.), so running `python src/run.py` or `python src/__main__.py` directly will fail with:
+**Important:** this must be run with the `-m` flag (as a module), not by pointing Python at the file directly. The `src` package uses relative imports (`from .app import my_app`, etc.), so running `python src/run.py` or `python src/__main__.py` directly will fail with:
 
 ```
 ImportError: attempted relative import with no known parent package
 ```
 
-On success, the run prints a LangSmith experiment URL (`smith.langchain.com/...`) where you can view per-example results.
+On success, the run creates one LangSmith experiment per model in `MODELS` and prints/returns each experiment's URL (`smith.langchain.com/...`) where you can view per-example results.
 
 ## Evaluators
 
 - **`correctness`** — LLM-as-judge. Sends the predicted answer and the reference answer to `gpt-4o-mini` (temperature `0`) and asks it to grade the response as `CORRECT` or `INCORRECT`. Returns `True` only if the judge says `CORRECT`.
-- **`concision`** — Rule-based. Passes if the response is shorter than twice the length of the reference answer (`len(response) < 2 * len(reference)`).
+- **`concision`** — Rule-based. Passes if the response is shorter than 4x the length of the reference answer (`len(response) < 4 * len(reference)`).
 
 ## Model comparison: gpt-4o-mini vs gpt-4-turbo
 
-The target model is configurable via `my_app`'s `model` parameter (see `notebooks/chat_eval_study_guide.ipynb`, which runs the same dataset/evaluators against both `gpt-4o-mini` and `gpt-4-turbo` as separate LangSmith experiments — `openai-4o-mini-chatbot-*` and `openai-4-turbo-chatbot-*`).
+`src/run.py` defines `MODELS = ["gpt-4o-mini", "gpt-4-turbo"]` and loops over it in `main()`, calling `my_app(question, model=model)` and `client.evaluate(...)` once per model. Each run of `python -m src` therefore produces two separate LangSmith experiments — `gpt-4o-mini-chatbot-*` and `gpt-4-turbo-chatbot-*` — scored by the same `correctness`/`concision` evaluators over the same dataset, so they're directly comparable in the LangSmith UI. (`notebooks/chat_eval_study_guide.ipynb` shows the same comparison as a standalone, non-modularized walkthrough.)
 
-Results from comparing the two experiments over the 5-example dataset:
+Results from comparing the two experiments over the 5-example dataset (measured with the old `2x` concision threshold — rerun after the `4x` change above to get current numbers):
 
 | Metric | gpt-4o-mini | gpt-4-turbo |
 | --- | --- | --- |
@@ -145,7 +149,7 @@ Results from comparing the two experiments over the 5-example dataset:
 | Total tokens | 252 | 283 |
 | Total cost | < $0.0001 | $0.0054 |
 
-**Conclusion:** both models tie on correctness, but `gpt-4o-mini` is more concise, ~4x faster, and roughly 50x cheaper — making it the better choice for this chatbot. This is why `gpt-4o-mini` is the default (and only) model wired into `src/app.py`; `gpt-4-turbo` was evaluated as a comparison baseline in the notebook and did not justify its added latency/cost.
+**Conclusion:** both models tie on correctness, but `gpt-4o-mini` is more concise, ~4x faster, and roughly 50x cheaper — making it the better default. `my_app`'s `model` parameter still defaults to `gpt-4o-mini` in `src/app.py`; `gpt-4-turbo` is kept in `MODELS` as an ongoing comparison baseline rather than the primary choice.
 
 ## Dataset
 

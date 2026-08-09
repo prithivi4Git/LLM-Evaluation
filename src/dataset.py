@@ -24,21 +24,15 @@ def create_dataset() -> None:
             },
             {
                 "inputs": {"question": "What is OpenAI?"},
-                "outputs": {
-                    "answer": "A company that creates Large Language Models"
-                },
+                "outputs": {"answer": "A company that creates Large Language Models"},
             },
             {
                 "inputs": {"question": "What is Google?"},
-                "outputs": {
-                    "answer": "A technology company known for search"
-                },
+                "outputs": {"answer": "A technology company known for search"},
             },
             {
                 "inputs": {"question": "What is Mistral?"},
-                "outputs": {
-                    "answer": "A company that creates Large Language Models"
-                },
+                "outputs": {"answer": "A company that creates Large Language Models"},
             },
         ],
     )
