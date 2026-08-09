@@ -164,3 +164,6 @@ Results from comparing the two experiments over the 5-example dataset (measured 
 ## Viewing results
 
 Every run of `client.evaluate(...)` prints/returns a link to the corresponding experiment in the LangSmith UI, where you can inspect each example's input, output, reference answer, and evaluator scores.
+
+<img width="1727" height="922" alt="Screenshot 2026-08-08 at 5 58 52 PM" src="https://github.com/user-attachments/assets/7365e331-4ac6-41fa-ae02-5474b88cc9b7" />
+
