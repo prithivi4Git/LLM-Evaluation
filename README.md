@@ -55,7 +55,7 @@ flowchart TD
     J --> K["response returned as<br/>{'response': ...}"]
 
     K --> L["correctness(inputs, outputs,<br/>reference_outputs)"]
-    L --> L1["LLM judge call to<br/>gpt-4o-mini: CORRECT/INCORRECT"]
+    L --> L1["LLM judge call to<br/>gpt-4o: CORRECT/INCORRECT"]
 
     K --> M["concision(outputs,<br/>reference_outputs)"]
     M --> M1["len(response) < 4 * len(reference)"]
@@ -132,7 +132,7 @@ On success, the run creates one LangSmith experiment per model in `MODELS` and p
 
 ## Evaluators
 
-- **`correctness`** — LLM-as-judge. Sends the predicted answer and the reference answer to `gpt-4o-mini` (temperature `0`) and asks it to grade the response as `CORRECT` or `INCORRECT`. Returns `True` only if the judge says `CORRECT`.
+- **`correctness`** — LLM-as-judge. Sends the predicted answer and the reference answer to `gpt-4o` (temperature `0`) and asks it to grade the response as `CORRECT` or `INCORRECT`. Returns `True` only if the judge says `CORRECT`. The judge model is deliberately kept outside `MODELS` so it isn't grading its own output when `gpt-4o-mini` is the model under test.
 - **`concision`** — Rule-based. Passes if the response is shorter than 4x the length of the reference answer (`len(response) < 4 * len(reference)`).
 
 ## Model comparison: gpt-4o-mini vs gpt-4-turbo
